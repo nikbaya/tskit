@@ -35,11 +35,11 @@ class LdCalculator(object):
     """
     Class for calculating `linkage disequilibrium
     <https://en.wikipedia.org/wiki/Linkage_disequilibrium>`_ coefficients
-    between pairs of mutations in a :class:`.TreeSequence`. This class requires
+    between pairs of mutations in a :class:`TreeSequence`. This class requires
     the `numpy <http://www.numpy.org/>`_ library.
 
     This class supports multithreaded access using the Python :mod:`threading`
-    module. Separate instances of :class:`.LdCalculator` referencing the
+    module. Separate instances of :class:`LdCalculator` referencing the
     same tree sequence can operate in parallel in multiple threads.
 
     .. note:: This class does not currently support sites that have more than one
@@ -54,9 +54,6 @@ class LdCalculator(object):
         self._tree_sequence = tree_sequence
         self._ll_ld_calculator = _tskit.LdCalculator(
             tree_sequence.get_ll_tree_sequence())
-        item_size = struct.calcsize('d')
-        self._buffer = bytearray(
-            tree_sequence.get_num_mutations() * item_size)
         # To protect low-level C code, only one method may execute on the
         # low-level objects at one time.
         self._instance_lock = threading.Lock()
@@ -98,18 +95,18 @@ class LdCalculator(object):
         :math:`b` considered, we then insert the value of :math:`r^2` between
         :math:`a` and :math:`b` at the corresponding index in an array, and
         return the entire array. If the returned array is :math:`x` and
-        ``direction`` is :const:`tskit.FORWARD` then :math:`x[0]` is the
+        ``direction`` is :data:`tskit.FORWARD` then :math:`x[0]` is the
         value of the statistic for :math:`a` and :math:`a + 1`, :math:`x[1]`
         the value for :math:`a` and :math:`a + 2`, etc. Similarly, if
-        ``direction`` is :const:`tskit.REVERSE` then :math:`x[0]` is the
+        ``direction`` is :data:`tskit.REVERSE` then :math:`x[0]` is the
         value of the statistic for :math:`a` and :math:`a - 1`, :math:`x[1]`
         the value for :math:`a` and :math:`a - 2`, etc.
 
         :param int a: The index of the focal mutation.
         :param int direction: The direction in which to travel when
             examining other mutations. Must be either
-            :const:`tskit.FORWARD` or :const:`tskit.REVERSE`. Defaults
-            to :const:`tskit.FORWARD`.
+            :data:`tskit.FORWARD` or :data:`tskit.REVERSE`. Defaults
+            to :data:`tskit.FORWARD`.
         :param int max_mutations: The maximum number of mutations to return
             :math:`r^2` values for. Defaults to as many mutations as
             possible.
@@ -130,11 +127,13 @@ class LdCalculator(object):
             max_mutations = -1
         if max_distance is None:
             max_distance = sys.float_info.max
+        item_size = struct.calcsize('d')
+        buffer = bytearray(self._tree_sequence.get_num_mutations() * item_size)
         with self._instance_lock:
             num_values = self._ll_ld_calculator.get_r2_array(
-                self._buffer, a, direction=direction,
+                buffer, a, direction=direction,
                 max_mutations=max_mutations, max_distance=max_distance)
-        return np.frombuffer(self._buffer, "d", num_values)
+        return np.frombuffer(buffer, "d", num_values)
 
     def get_r2_matrix(self):
         # Deprecated alias for r2_matrix

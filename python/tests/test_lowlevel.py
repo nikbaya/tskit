@@ -57,7 +57,7 @@ def get_tracked_sample_counts(st, tracked_samples):
 
 def get_sample_counts(tree_sequence, st):
     """
-    Returns a list of the sample node counts for the specfied sparse tree.
+    Returns a list of the sample node counts for the specified tree.
     """
     nu = [0 for j in range(st.get_num_nodes())]
     for j in range(tree_sequence.get_num_samples()):
@@ -74,7 +74,7 @@ class LowLevelTestCase(unittest.TestCase):
     """
     def verify_tree_dict(self, n, pi):
         """
-        Verifies that the specified sparse tree in dict format is a
+        Verifies that the specified tree in dict format is a
         consistent coalescent history for a sample of size n.
         """
         self.assertLessEqual(len(pi), 2 * n - 1)
@@ -182,26 +182,26 @@ class TestTableCollection(LowLevelTestCase):
         with self.assertRaises(_tskit.LibraryError):
             tc.simplify([0, -1])
 
-    def test_map_ancestors_bad_args(self):
+    def test_link_ancestors_bad_args(self):
         ts = msprime.simulate(10, random_seed=1)
         tc = ts.tables.ll_tables
         with self.assertRaises(TypeError):
-            tc.map_ancestors()
+            tc.link_ancestors()
         with self.assertRaises(TypeError):
-            tc.map_ancestors([0, 1])
+            tc.link_ancestors([0, 1])
         with self.assertRaises(ValueError):
-            tc.map_ancestors(samples=[0, 1], ancestors="sdf")
+            tc.link_ancestors(samples=[0, 1], ancestors="sdf")
         with self.assertRaises(ValueError):
-            tc.map_ancestors(samples="sdf", ancestors=[0, 1])
+            tc.link_ancestors(samples="sdf", ancestors=[0, 1])
         with self.assertRaises(_tskit.LibraryError):
-            tc.map_ancestors(samples=[0, 1], ancestors=[11, -1])
+            tc.link_ancestors(samples=[0, 1], ancestors=[11, -1])
         with self.assertRaises(_tskit.LibraryError):
-            tc.map_ancestors(samples=[0, -1], ancestors=[11])
+            tc.link_ancestors(samples=[0, -1], ancestors=[11])
 
-    def test_map_ancestors(self):
+    def test_link_ancestors(self):
         ts = msprime.simulate(2, random_seed=1)
         tc = ts.tables.ll_tables
-        edges = tc.map_ancestors([0, 1], [3])
+        edges = tc.link_ancestors([0, 1], [3])
         self.assertIsInstance(edges, _tskit.EdgeTable)
         del edges
         self.assertEqual(tc.edges.num_rows, 2)
@@ -341,7 +341,11 @@ class TestTreeSequence(LowLevelTestCase):
             G = ts.get_genotype_matrix()
             self.assertEqual(G.shape, (num_sites, num_samples))
             self.assertRaises(
-                    TypeError, ts.get_genotype_matrix, impute_missing_data=None)
+                TypeError, ts.get_genotype_matrix, impute_missing_data=None)
+            self.assertRaises(
+                TypeError, ts.get_genotype_matrix, alleles="XYZ")
+            self.assertRaises(
+                ValueError, ts.get_genotype_matrix, alleles=tuple())
             G = ts.get_genotype_matrix(impute_missing_data=True)
             self.assertEqual(G.shape, (num_sites, num_samples))
 
@@ -1093,6 +1097,24 @@ class TestVariantGenerator(LowLevelTestCase):
             TypeError, _tskit.VariantGenerator, ts, impute_missing_data=None)
         self.assertRaises(
             _tskit.LibraryError, _tskit.VariantGenerator, ts, samples=[-1, 2])
+        self.assertRaises(
+            TypeError, _tskit.VariantGenerator, ts, alleles=1234)
+
+    def test_alleles(self):
+        ts = self.get_example_tree_sequence()
+        for bad_type in [["a", "b"], "sdf", 234]:
+            with self.assertRaises(TypeError):
+                _tskit.VariantGenerator(ts, samples=[1, 2], alleles=bad_type)
+        with self.assertRaises(ValueError):
+            _tskit.VariantGenerator(ts, samples=[1, 2], alleles=tuple())
+
+        for bad_allele_type in [None, 0, b"x", []]:
+            with self.assertRaises(TypeError):
+                _tskit.VariantGenerator(ts, samples=[1, 2], alleles=(bad_allele_type,))
+
+        too_many_alleles = tuple(str(j) for j in range(128))
+        with self.assertRaises(_tskit.LibraryError):
+            _tskit.VariantGenerator(ts, samples=[1, 2], alleles=too_many_alleles)
 
     def test_iterator(self):
         ts = self.get_example_tree_sequence()
@@ -1109,29 +1131,6 @@ class TestVariantGenerator(LowLevelTestCase):
         _, genotypes, alleles = variant
         self.assertTrue(np.all(genotypes == -1))
         self.assertEqual(alleles, ("A", None))
-
-
-class TestHaplotypeGenerator(LowLevelTestCase):
-    """
-    Tests for the HaplotypeGenerator class.
-    """
-    def test_uninitialised_tree_sequence(self):
-        ts = _tskit.TreeSequence()
-        self.assertRaises(ValueError, _tskit.HaplotypeGenerator, ts)
-
-    def test_constructor(self):
-        self.assertRaises(TypeError, _tskit.HaplotypeGenerator)
-        self.assertRaises(
-            TypeError, _tskit.HaplotypeGenerator, impute_missing_data=None)
-        self.assertRaises(TypeError, _tskit.HaplotypeGenerator, True, None)
-
-    def test_bad_id(self):
-        ts = self.get_example_tree_sequence()
-        hg = _tskit.HaplotypeGenerator(ts)
-        n = ts.get_num_samples()
-        for bad_id in [-1, n, n + 1]:
-            with self.assertRaises(_tskit.LibraryError):
-                hg.get_haplotype(bad_id)
 
 
 class TestLdCalculator(LowLevelTestCase):
@@ -1187,7 +1186,7 @@ class TestLdCalculator(LowLevelTestCase):
 
 class TestTree(LowLevelTestCase):
     """
-    Tests on the low-level sparse tree interface.
+    Tests on the low-level tree interface.
     """
 
     def test_options(self):
@@ -1284,7 +1283,7 @@ class TestTree(LowLevelTestCase):
         for ts in self.get_example_tree_sequences():
             st = _tskit.Tree(ts)
             self.assertEqual(st.get_num_nodes(), ts.get_num_nodes())
-            # An uninitialised sparse tree should always be zero.
+            # An uninitialised tree should always be zero.
             self.assertEqual(st.get_left_root(), 0)
             self.assertEqual(st.get_left(), 0)
             self.assertEqual(st.get_right(), 0)
@@ -1586,6 +1585,55 @@ class TestTree(LowLevelTestCase):
                 self.assertFalse(t1.equals(t2))
                 self.assertFalse(t2.equals(t1))
             last_ts = ts
+
+    def test_kc_distance_errors(self):
+        ts1 = self.get_example_tree_sequence(10)
+        t1 = _tskit.Tree(ts1)
+        t1.first()
+        self.assertRaises(TypeError, t1.get_kc_distance)
+        self.assertRaises(TypeError, t1.get_kc_distance, t1)
+        for bad_tree in [None, "tree", 0]:
+            self.assertRaises(TypeError, t1.get_kc_distance, bad_tree, lambda_=0)
+        for bad_value in ["tree", [], None]:
+            self.assertRaises(
+                TypeError, t1.get_kc_distance, t1, lambda_=bad_value)
+
+        t2 = _tskit.Tree(ts1)
+        # If we don't seek to a specific tree, it has multiple roots (i.e., it's
+        # in the null state). This fails because we don't accept multiple roots.
+        with self.assertRaises(_tskit.LibraryError):
+            t1.get_kc_distance(t2, 0)
+
+        # Different numbers of samples fail.
+        ts2 = self.get_example_tree_sequence(11)
+        t2 = _tskit.Tree(ts2)
+        t2.first()
+        with self.assertRaises(_tskit.LibraryError):
+            t1.get_kc_distance(t2, 0)
+
+        # Internal samples cause errors.
+        tables = _tskit.TableCollection(1.0)
+        tables.nodes.add_row(flags=1)
+        tables.nodes.add_row(flags=1, time=1)
+        tables.edges.add_row(0, 1, 1, 0)
+        ts = _tskit.TreeSequence()
+        ts.load_tables(tables)
+        t1 = _tskit.Tree(ts)
+        t1.first()
+        with self.assertRaises(_tskit.LibraryError):
+            t1.get_kc_distance(t1, 0)
+
+    def test_kc_distance(self):
+        ts1 = self.get_example_tree_sequence(10, random_seed=123456)
+        t1 = _tskit.Tree(ts1)
+        t1.first()
+        ts2 = self.get_example_tree_sequence(10, random_seed=1234)
+        t2 = _tskit.Tree(ts2)
+        t2.first()
+        for lambda_ in [-1, 0, 1, 1000, -1e300]:
+            x1 = t1.get_kc_distance(t2, lambda_)
+            x2 = t2.get_kc_distance(t1, lambda_)
+            self.assertAlmostEqual(x1, x2)
 
     def test_copy(self):
         for ts in self.get_example_tree_sequences():

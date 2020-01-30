@@ -655,6 +655,11 @@ class TestTreeSequence(HighLevelTestCase):
             for index, edge in enumerate(ts.edges()):
                 self.assertEqual(edge.id, index)
 
+    def test_edge_span_property(self):
+        for ts in get_example_tree_sequences():
+            for edge in ts.edges():
+                self.assertEqual(edge.span, edge.right - edge.left)
+
     def test_edgesets(self):
         for ts in get_example_tree_sequences():
             self.verify_edgesets(ts)
@@ -1212,6 +1217,11 @@ class TestTreeSequence(HighLevelTestCase):
             self.assertEqual(migration.right, 1)
             self.assertTrue(0 <= migration.node < ts.num_nodes)
 
+    def test_len_trees(self):
+        for ts in get_example_tree_sequences():
+            tree_iter = ts.trees()
+            self.assertEqual(len(tree_iter), ts.num_trees)
+
     def test_list(self):
         for ts in get_example_tree_sequences():
             tree_list = ts.aslist()
@@ -1261,6 +1271,35 @@ class TestTreeSequence(HighLevelTestCase):
                     self.assertEqual(t3, t2)
                     self.assertEqual(t3.interval, t2.interval)
                     self.assertEqual(t3.parent_dict, t2.parent_dict)
+
+    def test_sequence_iteration(self):
+        for ts in get_example_tree_sequences():
+            for table_name, _ in ts.tables:
+                sequence = getattr(ts, table_name)()
+                length = getattr(ts, "num_" + table_name)
+                # Test __iter__
+                for i, n in enumerate(sequence):
+                    self.assertEqual(i, n.id)
+                self.assertEqual(n.id, length - 1 if length else 0)
+                if table_name == 'mutations':
+                    # Mutations are not currently sequences, so have no len or idx access
+                    self.assertRaises(TypeError, len, sequence)
+                    if length != 0:
+                        with self.assertRaises(TypeError):
+                            sequence[0]
+                else:
+                    # Test __len__
+                    self.assertEqual(len(sequence), length)
+                    # Test __getitem__ on the last item in the sequence
+                    if length != 0:
+                        self.assertEqual(sequence[length - 1], n)  # +ive indexing
+                        self.assertEqual(sequence[-1], n)          # -ive indexing
+                    with self.assertRaises(IndexError):
+                        sequence[length]
+                    # Test reverse
+                    for i, n in enumerate(reversed(sequence)):
+                        self.assertEqual(i, length - 1 - n.id)
+                    self.assertEqual(n.id, 0)
 
 
 class TestFileUuid(HighLevelTestCase):
@@ -1511,10 +1550,10 @@ class TestTreeSequenceTextIO(HighLevelTestCase):
 
 class TestTree(HighLevelTestCase):
     """
-    Some simple tests on the API for the sparse tree.
+    Some simple tests on the tree API.
     """
     def get_tree(self, sample_lists=False):
-        ts = msprime.simulate(10, random_seed=1, mutation_rate=1)
+        ts = msprime.simulate(10, random_seed=1, mutation_rate=1, record_full_arg=True)
         return next(ts.trees(sample_lists=sample_lists))
 
     def verify_mutations(self, tree):
@@ -1579,6 +1618,11 @@ class TestTree(HighLevelTestCase):
                 self.assertEqual(l1, l2)
                 self.assertEqual(t.get_num_samples(u), len(l1))
 
+    def test_num_children(self):
+        tree = self.get_tree()
+        for u in tree.nodes():
+            self.assertEqual(tree.num_children(u), len(tree.children(u)))
+
     def verify_newick(self, tree):
         """
         Verifies that we output the newick tree as expected.
@@ -1620,6 +1664,23 @@ class TestTree(HighLevelTestCase):
         for ts in get_example_tree_sequences():
             tree = next(ts.trees())
             self.verify_traversals(tree)
+
+            # To verify time-ordered traversal we can't use the method used for the
+            # other traversals above, it checks for one-to-one correspondence.
+            # As more than one ordering is valid for time, we do it separately here
+            for root in tree.roots:
+                time_ordered = tree.nodes(root, order="timeasc")
+                t = tree.time(next(time_ordered))
+                for u in time_ordered:
+                    next_t = tree.time(u)
+                    self.assertGreaterEqual(next_t, t)
+                    t = next_t
+                time_ordered = tree.nodes(root, order="timedesc")
+                t = tree.time(next(time_ordered))
+                for u in time_ordered:
+                    next_t = tree.time(u)
+                    self.assertLessEqual(next_t, t)
+                    t = next_t
 
     def verify_traversals(self, tree):
         t1 = tree

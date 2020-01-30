@@ -199,7 +199,7 @@ class BaseTable(object):
 
     def set_columns(self, **kwargs):
         """
-        Sets the values for each column in this :class:`.Table` using
+        Sets the values for each column in this :class:`Table` using
         values provided in numpy arrays. Overwrites any data currently stored in
         the table.
         """
@@ -294,7 +294,7 @@ class IndividualTable(BaseTable, MetadataMixin):
             self, flags=None, location=None, location_offset=None,
             metadata=None, metadata_offset=None):
         """
-        Sets the values for each column in this :class:`.IndividualTable` using the
+        Sets the values for each column in this :class:`IndividualTable` using the
         values in the specified arrays. Overwrites any data currently stored in
         the table.
 
@@ -435,9 +435,9 @@ class NodeTable(BaseTable, MetadataMixin):
         :param int flags: The bitwise flags for the new node.
         :param float time: The birth time for the new node.
         :param int population: The ID of the population in which the new node was born.
-            Defaults to :const:`.NULL`.
+            Defaults to :data:`tskit.NULL`.
         :param int individual: The ID of the individual in which the new node was born.
-            Defaults to :const:`.NULL`.
+            Defaults to :data:`tskit.NULL`.
         :param bytes metadata: The binary-encoded metadata for the new node. If not
             specified or None, a zero-length byte string is stored.
         :return: The ID of the newly added node.
@@ -449,7 +449,7 @@ class NodeTable(BaseTable, MetadataMixin):
             self, flags=None, time=None, population=None, individual=None, metadata=None,
             metadata_offset=None):
         """
-        Sets the values for each column in this :class:`.NodeTable` using the values in
+        Sets the values for each column in this :class:`NodeTable` using the values in
         the specified arrays. Overwrites any data currently stored in the table.
 
         The ``flags``, ``time`` and ``population`` arrays must all be of the same length,
@@ -463,10 +463,10 @@ class NodeTable(BaseTable, MetadataMixin):
         :param time: The time values for each node. Required.
         :type time: numpy.ndarray, dtype=np.float64
         :param population: The population values for each node. If not specified
-            or None, the :const:`.NULL` value is stored for each node.
+            or None, the :data:`tskit.NULL` value is stored for each node.
         :type population: numpy.ndarray, dtype=np.int32
         :param individual: The individual values for each node. If not specified
-            or None, the :const:`.NULL` value is stored for each node.
+            or None, the :data:`tskit.NULL` value is stored for each node.
         :type individual: numpy.ndarray, dtype=np.int32
         :param metadata: The flattened metadata array. Must be specified along
             with ``metadata_offset``. If not specified or None, an empty metadata
@@ -498,10 +498,10 @@ class NodeTable(BaseTable, MetadataMixin):
         :param time: The time values for each node. Required.
         :type time: numpy.ndarray, dtype=np.float64
         :param population: The population values for each node. If not specified
-            or None, the :const:`.NULL` value is stored for each node.
+            or None, the :data:`tskit.NULL` value is stored for each node.
         :type population: numpy.ndarray, dtype=np.int32
         :param individual: The individual values for each node. If not specified
-            or None, the :const:`.NULL` value is stored for each node.
+            or None, the :data:`tskit.NULL` value is stored for each node.
         :type individual: numpy.ndarray, dtype=np.int32
         :param metadata: The flattened metadata array. Must be specified along
             with ``metadata_offset``. If not specified or None, an empty metadata
@@ -574,7 +574,7 @@ class EdgeTable(BaseTable):
 
     def set_columns(self, left=None, right=None, parent=None, child=None):
         """
-        Sets the values for each column in this :class:`.EdgeTable` using the values
+        Sets the values for each column in this :class:`EdgeTable` using the values
         in the specified arrays. Overwrites any data currently stored in the table.
 
         All four parameters are mandatory, and must be numpy arrays of the
@@ -699,7 +699,7 @@ class MigrationTable(BaseTable):
     def set_columns(
             self, left=None, right=None, node=None, source=None, dest=None, time=None):
         """
-        Sets the values for each column in this :class:`.MigrationTable` using the values
+        Sets the values for each column in this :class:`MigrationTable` using the values
         in the specified arrays. Overwrites any data currently stored in the table.
 
         All six parameters are mandatory, and must be numpy arrays of the
@@ -819,7 +819,7 @@ class SiteTable(BaseTable, MetadataMixin):
             self, position=None, ancestral_state=None, ancestral_state_offset=None,
             metadata=None, metadata_offset=None):
         """
-        Sets the values for each column in this :class:`.SiteTable` using the values
+        Sets the values for each column in this :class:`SiteTable` using the values
         in the specified arrays. Overwrites any data currently stored in the table.
 
         The ``position``, ``ancestral_state`` and ``ancestral_state_offset``
@@ -989,7 +989,7 @@ class MutationTable(BaseTable, MetadataMixin):
             self, site=None, node=None, derived_state=None, derived_state_offset=None,
             parent=None, metadata=None, metadata_offset=None):
         """
-        Sets the values for each column in this :class:`.MutationTable` using the values
+        Sets the values for each column in this :class:`MutationTable` using the values
         in the specified arrays. Overwrites any data currently stored in the table.
 
         The ``site``, ``node``, ``derived_state`` and ``derived_state_offset``
@@ -1140,10 +1140,43 @@ class PopulationTable(BaseTable, MetadataMixin):
         return ret[:-1]
 
     def set_columns(self, metadata=None, metadata_offset=None):
+        """
+        Sets the values for each column in this :class:`PopulationTable` using the
+        values in the specified arrays. Overwrites any data currently stored in the
+        table.
+
+        The ``metadata`` and ``metadata_offset`` parameters must be supplied
+        together, and meet the requirements for
+        :ref:`sec_encoding_ragged_columns` (see
+        :ref:`sec_tables_api_binary_columns` for more information).
+
+        :param metadata: The flattened metadata array. Must be specified along
+            with ``metadata_offset``. If not specified or None, an empty metadata
+            value is stored for each node.
+        :type metadata: numpy.ndarray, dtype=np.int8
+        :param metadata_offset: The offsets into the ``metadata`` array.
+        :type metadata_offset: numpy.ndarray, dtype=np.uint32.
+        """
         self.ll_table.set_columns(
             dict(metadata=metadata, metadata_offset=metadata_offset))
 
     def append_columns(self, metadata=None, metadata_offset=None):
+        """
+        Appends the specified arrays to the end of the columns of this
+        :class:`PopulationTable`. This allows many new rows to be added at once.
+
+        The ``metadata`` and ``metadata_offset`` parameters must be supplied
+        together, and meet the requirements for
+        :ref:`sec_encoding_ragged_columns` (see
+        :ref:`sec_tables_api_binary_columns` for more information).
+
+        :param metadata: The flattened metadata array. Must be specified along
+            with ``metadata_offset``. If not specified or None, an empty metadata
+            value is stored for each node.
+        :type metadata: numpy.ndarray, dtype=np.int8
+        :param metadata_offset: The offsets into the ``metadata`` array.
+        :type metadata_offset: numpy.ndarray, dtype=np.uint32.
+        """
         self.ll_table.append_columns(
             dict(metadata=metadata, metadata_offset=metadata_offset))
 
@@ -1201,6 +1234,30 @@ class ProvenanceTable(BaseTable):
     def set_columns(
             self, timestamp=None, timestamp_offset=None,
             record=None, record_offset=None):
+        """
+        Sets the values for each column in this :class:`ProvenanceTable` using the
+        values in the specified arrays. Overwrites any data currently stored in the
+        table.
+
+        The ``timestamp`` and ``timestamp_offset`` parameters must be supplied
+        together, and meet the requirements for
+        :ref:`sec_encoding_ragged_columns` (see
+        :ref:`sec_tables_api_binary_columns` for more information). Likewise
+        for the ``record`` and ``record_offset`` columns
+
+        :param timestamp: The flattened timestamp array. Must be specified along
+            with ``timestamp_offset``. If not specified or None, an empty timestamp
+            value is stored for each node.
+        :type timestamp: numpy.ndarray, dtype=np.int8
+        :param timestamp_offset: The offsets into the ``timestamp`` array.
+        :type timestamp_offset: numpy.ndarray, dtype=np.uint32.
+        :param record: The flattened record array. Must be specified along
+            with ``record_offset``. If not specified or None, an empty record
+            value is stored for each node.
+        :type record: numpy.ndarray, dtype=np.int8
+        :param record_offset: The offsets into the ``record`` array.
+        :type record_offset: numpy.ndarray, dtype=np.uint32.
+        """
         self.ll_table.set_columns(dict(
             timestamp=timestamp, timestamp_offset=timestamp_offset,
             record=record, record_offset=record_offset))
@@ -1208,6 +1265,29 @@ class ProvenanceTable(BaseTable):
     def append_columns(
             self, timestamp=None, timestamp_offset=None,
             record=None, record_offset=None):
+        """
+        Appends the specified arrays to the end of the columns of this
+        :class:`ProvenanceTable`. This allows many new rows to be added at once.
+
+        The ``timestamp`` and ``timestamp_offset`` parameters must be supplied
+        together, and meet the requirements for
+        :ref:`sec_encoding_ragged_columns` (see
+        :ref:`sec_tables_api_binary_columns` for more information). Likewise
+        for the ``record`` and ``record_offset`` columns
+
+        :param timestamp: The flattened timestamp array. Must be specified along
+            with ``timestamp_offset``. If not specified or None, an empty timestamp
+            value is stored for each node.
+        :type timestamp: numpy.ndarray, dtype=np.int8
+        :param timestamp_offset: The offsets into the ``timestamp`` array.
+        :type timestamp_offset: numpy.ndarray, dtype=np.uint32.
+        :param record: The flattened record array. Must be specified along
+            with ``record_offset``. If not specified or None, an empty record
+            value is stored for each node.
+        :type record: numpy.ndarray, dtype=np.int8
+        :param record_offset: The offsets into the ``record`` array.
+        :type record_offset: numpy.ndarray, dtype=np.uint32.
+        """
         self.ll_table.append_columns(dict(
             timestamp=timestamp, timestamp_offset=timestamp_offset,
             record=record, record_offset=record_offset))
@@ -1508,7 +1588,7 @@ class TableCollection(object):
             in the output. (Default: False)
         :return: A numpy array mapping node IDs in the input tables to their
             corresponding node IDs in the output tables.
-        :rtype: numpy array (dtype=np.int32).
+        :rtype: numpy.ndarray (dtype=np.int32)
         """
         if filter_zero_mutation_sites is not None:
             # Deprecated in 0.6.1.
@@ -1529,7 +1609,7 @@ class TableCollection(object):
             reduce_to_site_topology=reduce_to_site_topology,
             keep_unary=keep_unary)
 
-    def map_ancestors(self, samples, ancestors):
+    def link_ancestors(self, samples, ancestors):
         """
         Returns an :class:`EdgeTable` instance describing a subset of the genealogical
         relationships between the nodes in``samples`` and ``ancestors``.
@@ -1547,12 +1627,12 @@ class TableCollection(object):
         ``ancestors``.
 
         The following table shows which ``parent->child`` pairs will be shown in the
-        output of ``map_ancestors``.
+        output of ``link_ancestors``.
         A node is a relevant descendant on a given interval if it also appears somewhere
         in the ``parent`` column of the outputted table.
 
         ========================  ===============================================
-        Type of relationship      Shown in output of ``map_ancestors``
+        Type of relationship      Shown in output of ``link_ancestors``
         ------------------------  -----------------------------------------------
         ``ancestor->sample``      Always
         ``ancestor1->ancestor2``  Only if ``ancestor2`` has a relevant descendant
@@ -1584,8 +1664,12 @@ class TableCollection(object):
         """
         samples = util.safe_np_int_cast(samples, np.int32)
         ancestors = util.safe_np_int_cast(ancestors, np.int32)
-        ll_edge_table = self.ll_tables.map_ancestors(samples, ancestors)
+        ll_edge_table = self.ll_tables.link_ancestors(samples, ancestors)
         return EdgeTable(ll_table=ll_edge_table)
+
+    def map_ancestors(self, *args, **kwargs):
+        # A deprecated alias for link_ancestors()
+        return self.link_ancestors(*args, **kwargs)
 
     def sort(self, edge_start=0):
         """
@@ -1787,6 +1871,88 @@ class TableCollection(object):
             parameters = {
                 "command": "keep_intervals",
                 "TODO": "add parameters"
+            }
+            self.provenances.add_row(record=json.dumps(
+                provenance.get_provenance_dict(parameters)))
+
+    def _check_trim_conditions(self):
+        if self.migrations.num_rows > 0:
+            raise ValueError(
+                "You cannot trim a tree sequence containing migrations")
+        if self.edges.num_rows == 0:
+            raise ValueError(
+                "Trimming a tree sequence with no edges would reduce the sequence length"
+                " to zero, which is not allowed")
+
+    def ltrim(self, record_provenance=True):
+        """
+        Reset the coordinate system used in these tables, changing the left and right
+        genomic positions in the edge table such that the leftmost edge now starts at
+        position 0. This is identical to :meth:`TreeSequence.ltrim` but acts *in place*
+        to alter the data in this :class:`TableCollection`.
+
+        :param bool record_provenance: If ``True``, add details of this operation
+            to the provenance table in this TableCollection. (Default: ``True``).
+        """
+        self._check_trim_conditions()
+        leftmost = np.min(self.edges.left)
+        self.delete_sites(
+            np.where(self.sites.position < leftmost), record_provenance=False)
+        self.edges.set_columns(
+            left=self.edges.left - leftmost, right=self.edges.right - leftmost,
+            parent=self.edges.parent, child=self.edges.child)
+        self.sites.set_columns(
+            position=self.sites.position - leftmost,
+            ancestral_state=self.sites.ancestral_state,
+            ancestral_state_offset=self.sites.ancestral_state_offset,
+            metadata=self.sites.metadata,
+            metadata_offset=self.sites.metadata_offset)
+        self.sequence_length = self.sequence_length - leftmost
+        if record_provenance:
+            # TODO replace with a version of https://github.com/tskit-dev/tskit/pull/243
+            parameters = {
+                "command": "ltrim",
+            }
+            self.provenances.add_row(record=json.dumps(
+                provenance.get_provenance_dict(parameters)))
+
+    def rtrim(self, record_provenance=True):
+        """
+        Reset the ``sequence_length`` property so that the sequence ends at the end of
+        the last edge. This is identical to :meth:`TreeSequence.rtrim` but acts
+        *in place* to alter the data in this :class:`TableCollection`.
+
+        :param bool record_provenance: If ``True``, add details of this operation
+            to the provenance table in this TableCollection. (Default: ``True``).
+        """
+        self._check_trim_conditions()
+        rightmost = np.max(self.edges.right)
+        self.delete_sites(
+            np.where(self.sites.position >= rightmost), record_provenance=False)
+        self.sequence_length = rightmost
+        if record_provenance:
+            # TODO replace with a version of https://github.com/tskit-dev/tskit/pull/243
+            parameters = {
+                "command": "rtrim",
+            }
+            self.provenances.add_row(record=json.dumps(
+                provenance.get_provenance_dict(parameters)))
+
+    def trim(self, record_provenance=True):
+        """
+        Trim away any empty regions on the right and left of the tree sequence encoded by
+        these tables. This is identical to :meth:`TreeSequence.trim` but acts *in place*
+        to alter the data in this :class:`TableCollection`.
+
+        :param bool record_provenance: If ``True``, add details of this operation
+            to the provenance table in this TableCollection. (Default: ``True``).
+        """
+        self.rtrim(record_provenance=False)
+        self.ltrim(record_provenance=False)
+        if record_provenance:
+            # TODO replace with a version of https://github.com/tskit-dev/tskit/pull/243
+            parameters = {
+                "command": "trim",
             }
             self.provenances.add_row(record=json.dumps(
                 provenance.get_provenance_dict(parameters)))

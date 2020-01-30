@@ -2,7 +2,7 @@
 #
 
 # You can set these variables from the command line.
-SPHINXOPTS    = #-W
+SPHINXOPTS    = -W
 SPHINXBUILD   = python3 -m sphinx
 SOURCEDIR     = .
 BUILDDIR      = _build
@@ -18,6 +18,9 @@ ${DOXYGEN_XML}: ../c/tskit/*.h
 # Put it first so that "make" without argument is like "make help".
 help:
 	@$(SPHINXBUILD) -M help "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
+
+clean:
+	rm -rf $(BUILDDIR) $(DOXYGEN_XML)
 
 # .PHONY: help Makefile
 

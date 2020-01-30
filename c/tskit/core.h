@@ -180,10 +180,8 @@ of tskit.
 #define TSK_ERR_MUTATION_PARENT_DIFFERENT_SITE                      -500
 #define TSK_ERR_MUTATION_PARENT_EQUAL                               -501
 #define TSK_ERR_MUTATION_PARENT_AFTER_CHILD                         -502
-#define TSK_ERR_TOO_MANY_ALLELES                                    -503
-#define TSK_ERR_INCONSISTENT_MUTATIONS                              -504
-#define TSK_ERR_NON_SINGLE_CHAR_MUTATION                            -505
-#define TSK_ERR_UNSORTED_MUTATIONS                                  -506
+#define TSK_ERR_INCONSISTENT_MUTATIONS                              -503
+#define TSK_ERR_UNSORTED_MUTATIONS                                  -505
 
 /* Sample errors */
 #define TSK_ERR_DUPLICATE_SAMPLE                                    -600
@@ -219,9 +217,17 @@ of tskit.
 #define TSK_ERR_GENOTYPES_ALL_MISSING                              -1000
 #define TSK_ERR_BAD_GENOTYPE                                       -1001
 
-/* Missing data errors */
+/* Genotype decoding errors */
 #define TSK_ERR_MUST_IMPUTE_NON_SAMPLES                            -1100
-#define TSK_ERR_MUST_IMPUTE_HAPLOTYPES                             -1101
+#define TSK_ERR_ALLELE_NOT_FOUND                                   -1101
+#define TSK_ERR_TOO_MANY_ALLELES                                   -1102
+#define TSK_ERR_ZERO_ALLELES                                       -1103
+
+/* Distance metric errors */
+#define TSK_ERR_SAMPLE_SIZE_MISMATCH                               -1200
+#define TSK_ERR_SAMPLES_NOT_EQUAL                                  -1201
+#define TSK_ERR_INTERNAL_SAMPLES                                   -1202
+#define TSK_ERR_MULTIPLE_ROOTS                                     -1203
 
 
 /* This bit is 0 for any errors originating from kastore */

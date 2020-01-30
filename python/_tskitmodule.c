@@ -157,12 +157,6 @@ typedef struct {
 typedef struct {
     PyObject_HEAD
     TreeSequence *tree_sequence;
-    tsk_hapgen_t *haplotype_generator;
-} HaplotypeGenerator;
-
-typedef struct {
-    PyObject_HEAD
-    TreeSequence *tree_sequence;
     tsk_vargen_t *variant_generator;
 } VariantGenerator;
 
@@ -515,6 +509,57 @@ convert_transitions(tsk_state_transition_t *transitions, size_t num_transitions)
     }
     ret = l;
 out:
+    return ret;
+}
+
+static const char **
+parse_allele_list(PyObject *allele_tuple)
+{
+    const char **ret = NULL;
+    const char **alleles = NULL;
+    PyObject *str;
+    Py_ssize_t j, num_alleles;
+
+    if (! PyTuple_Check(allele_tuple)) {
+        PyErr_SetString(PyExc_TypeError, "Fixed allele list must be a tuple");
+        goto out;
+    }
+
+    num_alleles = PyTuple_Size(allele_tuple);
+    if (num_alleles == 0) {
+        PyErr_SetString(PyExc_ValueError, "Must specify at least one allele");
+        goto out;
+    }
+    /* Leave space for the sentinel, and initialise to NULL */
+    alleles = PyMem_Calloc(num_alleles + 1, sizeof(*alleles));
+    if (alleles == NULL) {
+        PyErr_NoMemory();
+        goto out;
+    }
+    for (j = 0; j < num_alleles; j++) {
+        str = PyTuple_GetItem(allele_tuple, j);
+        if (str == NULL) {
+            goto out;
+        }
+        if (!PyUnicode_Check(str)) {
+            PyErr_SetString(PyExc_TypeError, "alleles must be strings");
+            goto out;
+        }
+        /* PyUnicode_AsUTF8AndSize caches the UTF8 representation of the string
+         * within the object, and we're not responsible for freeing it. Thus,
+         * once we're sure the string object stays alive for the lifetime of the
+         * returned string, we can be sure it's safe. These strings are immediately
+         * copied during tsk_vargen_init, so the operation is safe.
+         */
+        alleles[j] = PyUnicode_AsUTF8AndSize(str, NULL);
+        if (alleles[j] == NULL) {
+            goto out;
+        }
+    }
+    ret = alleles;
+    alleles = NULL;
+out:
+    PyMem_Free(alleles);
     return ret;
 }
 
@@ -5468,7 +5513,7 @@ out:
 
 
 static PyObject *
-TableCollection_map_ancestors(TableCollection *self, PyObject *args, PyObject *kwds)
+TableCollection_link_ancestors(TableCollection *self, PyObject *args, PyObject *kwds)
 {
     int err;
     PyObject *ret = NULL;
@@ -5510,7 +5555,7 @@ TableCollection_map_ancestors(TableCollection *self, PyObject *args, PyObject *k
     if (result == NULL) {
         goto out;
     }
-    err = tsk_table_collection_map_ancestors(self->tables,
+    err = tsk_table_collection_link_ancestors(self->tables,
             PyArray_DATA(samples_array), num_samples,
             PyArray_DATA(ancestors_array), num_ancestors, 0,
             result->table);
@@ -5660,7 +5705,7 @@ static PyGetSetDef TableCollection_getsetters[] = {
 static PyMethodDef TableCollection_methods[] = {
     {"simplify", (PyCFunction) TableCollection_simplify, METH_VARARGS|METH_KEYWORDS,
         "Simplifies for a given sample subset." },
-    {"map_ancestors", (PyCFunction) TableCollection_map_ancestors,
+    {"link_ancestors", (PyCFunction) TableCollection_link_ancestors,
         METH_VARARGS|METH_KEYWORDS,
         "Returns an edge table linking samples to a set of specified ancestors." },
     {"sort", (PyCFunction) TableCollection_sort, METH_VARARGS|METH_KEYWORDS,
@@ -7284,17 +7329,19 @@ static PyObject *
 TreeSequence_get_genotype_matrix(TreeSequence *self, PyObject *args, PyObject *kwds)
 {
     PyObject *ret = NULL;
-    static char *kwlist[] = {"impute_missing_data", NULL};
+    static char *kwlist[] = {"impute_missing_data", "alleles", NULL};
     int err;
     size_t num_sites;
     size_t num_samples;
     npy_intp dims[2];
+    PyObject *py_alleles = Py_None;
     PyArrayObject *genotype_matrix = NULL;
     tsk_vargen_t *vg = NULL;
     char *V;
     tsk_variant_t *variant;
     size_t j;
     int impute_missing_data = 0;
+    const char **alleles = NULL;
     tsk_flags_t options = 0;
 
     if (TreeSequence_check_tree_sequence(self) != 0) {
@@ -7302,12 +7349,21 @@ TreeSequence_get_genotype_matrix(TreeSequence *self, PyObject *args, PyObject *k
     }
 
     /* TODO add option for 16 bit genotypes */
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "|i", kwlist, &impute_missing_data)) {
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "|iO", kwlist,
+                &impute_missing_data, &py_alleles)) {
         goto out;
     }
     if (impute_missing_data) {
         options |= TSK_IMPUTE_MISSING_DATA;
     }
+
+    if (py_alleles != Py_None) {
+        alleles = parse_allele_list(py_alleles);
+        if (alleles == NULL) {
+            goto out;
+        }
+    }
+
     num_sites = tsk_treeseq_get_num_sites(self->tree_sequence);
     num_samples = tsk_treeseq_get_num_samples(self->tree_sequence);
     dims[0] = num_sites;
@@ -7323,7 +7379,7 @@ TreeSequence_get_genotype_matrix(TreeSequence *self, PyObject *args, PyObject *k
         PyErr_NoMemory();
         goto out;
     }
-    err = tsk_vargen_init(vg, self->tree_sequence, NULL, 0, options);
+    err = tsk_vargen_init(vg, self->tree_sequence, NULL, 0, alleles, options);
     if (err != 0) {
         handle_library_error(err);
         goto out;
@@ -7345,6 +7401,7 @@ out:
         PyMem_Free(vg);
     }
     Py_XDECREF(genotype_matrix);
+    PyMem_Free(alleles);
     return ret;
 }
 
@@ -8143,6 +8200,26 @@ out:
 }
 
 static PyObject *
+Tree_get_num_children(Tree *self, PyObject *args)
+{
+    PyObject *ret = NULL;
+    unsigned int num_children;
+    int node;
+    tsk_id_t u;
+
+    if (Tree_get_node_argument(self, args, &node) != 0) {
+        goto out;
+    }
+    num_children = 0;
+    for (u = self->tree->left_child[node]; u != TSK_NULL; u = self->tree->right_sib[u]) {
+        num_children++;
+    }
+    ret = Py_BuildValue("I", num_children);
+out:
+    return ret;
+}
+
+static PyObject *
 Tree_get_num_samples(Tree *self, PyObject *args)
 {
     PyObject *ret = NULL;
@@ -8352,6 +8429,30 @@ out:
     return ret;
 }
 
+static PyObject *
+Tree_get_kc_distance(Tree *self, PyObject *args, PyObject *kwds)
+{
+    PyObject *ret = NULL;
+    Tree *other = NULL;
+    static char *kwlist[] = {"other", "lambda_", NULL};
+    double lambda = 0;
+    double result;
+    int err;
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "O!d", kwlist,
+                &TreeType, &other, &lambda)) {
+        goto out;
+    }
+    err = tsk_tree_kc_distance(self->tree, other->tree, lambda, &result);
+    if (err != 0) {
+        handle_library_error(err);
+        goto out;
+    }
+    ret = Py_BuildValue("d", result);
+out:
+    return ret;
+}
+
 static PyMemberDef Tree_members[] = {
     {NULL}  /* Sentinel */
 };
@@ -8370,9 +8471,9 @@ static PyMethodDef Tree_methods[] = {
     {"get_sample_size", (PyCFunction) Tree_get_sample_size, METH_NOARGS,
             "Returns the number of samples in this tree." },
     {"get_num_nodes", (PyCFunction) Tree_get_num_nodes, METH_NOARGS,
-            "Returns the number of nodes in the sparse tree." },
+            "Returns the number of nodes in this tree." },
     {"get_num_roots", (PyCFunction) Tree_get_num_roots, METH_NOARGS,
-            "Returns the number of roots in the sparse tree." },
+            "Returns the number of roots in this tree." },
     {"get_index", (PyCFunction) Tree_get_index, METH_NOARGS,
             "Returns the index this tree occupies within the tree sequence." },
     {"get_left_root", (PyCFunction) Tree_get_left_root, METH_NOARGS,
@@ -8415,6 +8516,8 @@ static PyMethodDef Tree_methods[] = {
             "Returns the index of the next sample after the specified sample index." },
     {"get_mrca", (PyCFunction) Tree_get_mrca, METH_VARARGS,
             "Returns the MRCA of nodes u and v" },
+    {"get_num_children", (PyCFunction) Tree_get_num_children, METH_VARARGS,
+            "Returns the number of children of node u." },
     {"get_num_samples", (PyCFunction) Tree_get_num_samples, METH_VARARGS,
             "Returns the number of samples below node u." },
     {"get_num_tracked_samples", (PyCFunction) Tree_get_num_tracked_samples,
@@ -8430,6 +8533,10 @@ static PyMethodDef Tree_methods[] = {
             "Returns True if this tree is equal to the parameter tree." },
     {"copy", (PyCFunction) Tree_copy, METH_NOARGS,
             "Returns a copy of this tree." },
+    {"get_kc_distance", (PyCFunction) Tree_get_kc_distance,
+            METH_VARARGS|METH_KEYWORDS,
+            "Returns the KC distance between this tree and another." },
+
     {NULL}  /* Sentinel */
 };
 
@@ -8661,148 +8768,6 @@ static PyTypeObject TreeDiffIteratorType = {
     (initproc)TreeDiffIterator_init,      /* tp_init */
 };
 
-/*===================================================================
- * HaplotypeGenerator
- *===================================================================
- */
-
-static int
-HaplotypeGenerator_check_state(HaplotypeGenerator *self)
-{
-    int ret = 0;
-    if (self->haplotype_generator == NULL) {
-        PyErr_SetString(PyExc_SystemError, "converter not initialised");
-        ret = -1;
-    }
-    return ret;
-}
-
-static void
-HaplotypeGenerator_dealloc(HaplotypeGenerator* self)
-{
-    if (self->haplotype_generator != NULL) {
-        tsk_hapgen_free(self->haplotype_generator);
-        PyMem_Free(self->haplotype_generator);
-        self->haplotype_generator = NULL;
-    }
-    Py_XDECREF(self->tree_sequence);
-    Py_TYPE(self)->tp_free((PyObject*)self);
-}
-
-static int
-HaplotypeGenerator_init(HaplotypeGenerator *self, PyObject *args, PyObject *kwds)
-{
-    int ret = -1;
-    int err;
-    static char *kwlist[] = {"tree_sequence", "impute_missing_data", NULL};
-    TreeSequence *tree_sequence;
-    int impute_missing_data = 0;
-    tsk_flags_t options = 0;
-
-    self->haplotype_generator = NULL;
-    self->tree_sequence = NULL;
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "O!|i", kwlist,
-            &TreeSequenceType, &tree_sequence, &impute_missing_data)) {
-        goto out;
-    }
-    self->tree_sequence = tree_sequence;
-    Py_INCREF(self->tree_sequence);
-    if (TreeSequence_check_tree_sequence(self->tree_sequence) != 0) {
-        goto out;
-    }
-    self->haplotype_generator = PyMem_Malloc(sizeof(tsk_hapgen_t));
-    if (self->haplotype_generator == NULL) {
-        PyErr_NoMemory();
-        goto out;
-    }
-    if (impute_missing_data) {
-        options |= TSK_IMPUTE_MISSING_DATA;
-    }
-    err = tsk_hapgen_init(self->haplotype_generator,
-            self->tree_sequence->tree_sequence, options);
-    if (err != 0) {
-        handle_library_error(err);
-        goto out;
-    }
-    ret = 0;
-out:
-    return ret;
-}
-
-static PyObject *
-HaplotypeGenerator_get_haplotype(HaplotypeGenerator *self, PyObject *args)
-{
-    int err;
-    PyObject *ret = NULL;
-    char *haplotype;
-    int sample_id;
-
-    if (HaplotypeGenerator_check_state(self) != 0) {
-        goto out;
-    }
-    if (!PyArg_ParseTuple(args, "i", &sample_id)) {
-        goto out;
-    }
-    err = tsk_hapgen_get_haplotype(self->haplotype_generator,
-            (tsk_id_t) sample_id, &haplotype);
-    if (err != 0) {
-        handle_library_error(err);
-        goto out;
-    }
-    ret = Py_BuildValue("s", haplotype);
-out:
-    return ret;
-}
-
-static PyMemberDef HaplotypeGenerator_members[] = {
-    {NULL}  /* Sentinel */
-};
-
-static PyMethodDef HaplotypeGenerator_methods[] = {
-    {"get_haplotype", (PyCFunction) HaplotypeGenerator_get_haplotype,
-        METH_VARARGS, "Returns the haplotype for the specified sample"},
-    {NULL}  /* Sentinel */
-};
-
-static PyTypeObject HaplotypeGeneratorType = {
-    PyVarObject_HEAD_INIT(NULL, 0)
-    "_tskit.HaplotypeGenerator",             /* tp_name */
-    sizeof(HaplotypeGenerator),             /* tp_basicsize */
-    0,                         /* tp_itemsize */
-    (destructor)HaplotypeGenerator_dealloc, /* tp_dealloc */
-    0,                         /* tp_print */
-    0,                         /* tp_getattr */
-    0,                         /* tp_setattr */
-    0,                         /* tp_reserved */
-    0,                         /* tp_repr */
-    0,                         /* tp_as_number */
-    0,                         /* tp_as_sequence */
-    0,                         /* tp_as_mapping */
-    0,                         /* tp_hash  */
-    0,                         /* tp_call */
-    0,                         /* tp_str */
-    0,                         /* tp_getattro */
-    0,                         /* tp_setattro */
-    0,                         /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT,        /* tp_flags */
-    "HaplotypeGenerator objects",           /* tp_doc */
-    0,                     /* tp_traverse */
-    0,                     /* tp_clear */
-    0,                     /* tp_richcompare */
-    0,                     /* tp_weaklistoffset */
-    0,                     /* tp_iter */
-    0,                     /* tp_iternext */
-    HaplotypeGenerator_methods,             /* tp_methods */
-    HaplotypeGenerator_members,             /* tp_members */
-    0,                         /* tp_getset */
-    0,                         /* tp_base */
-    0,                         /* tp_dict */
-    0,                         /* tp_descr_get */
-    0,                         /* tp_descr_set */
-    0,                         /* tp_dictoffset */
-    (initproc)HaplotypeGenerator_init,      /* tp_init */
-};
-
 
 /*===================================================================
  * VariantGenerator
@@ -8837,21 +8802,25 @@ VariantGenerator_init(VariantGenerator *self, PyObject *args, PyObject *kwds)
 {
     int ret = -1;
     int err;
-    static char *kwlist[] = {"tree_sequence", "samples", "impute_missing_data", NULL};
+    static char *kwlist[] = {"tree_sequence", "samples", "impute_missing_data",
+        "alleles", NULL};
     TreeSequence *tree_sequence = NULL;
     PyObject *samples_input = Py_None;
+    PyObject *py_alleles = Py_None;
     PyArrayObject *samples_array = NULL;
     tsk_id_t *samples = NULL;
     size_t num_samples = 0;
     int impute_missing_data = 0;
+    const char **alleles = NULL;
     npy_intp *shape;
     tsk_flags_t options = 0;
 
     /* TODO add option for 16 bit genotypes */
     self->variant_generator = NULL;
     self->tree_sequence = NULL;
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "O!|Oi", kwlist,
-            &TreeSequenceType, &tree_sequence, &samples_input, &impute_missing_data)) {
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "O!|OiO", kwlist,
+            &TreeSequenceType, &tree_sequence, &samples_input,
+            &impute_missing_data, &py_alleles)) {
         goto out;
     }
     if (impute_missing_data) {
@@ -8872,6 +8841,12 @@ VariantGenerator_init(VariantGenerator *self, PyObject *args, PyObject *kwds)
         num_samples = (size_t) shape[0];
         samples = PyArray_DATA(samples_array);
     }
+    if (py_alleles != Py_None) {
+        alleles = parse_allele_list(py_alleles);
+        if (alleles == NULL) {
+            goto out;
+        }
+    }
     self->variant_generator = PyMem_Malloc(sizeof(tsk_vargen_t));
     if (self->variant_generator == NULL) {
         PyErr_NoMemory();
@@ -8881,13 +8856,15 @@ VariantGenerator_init(VariantGenerator *self, PyObject *args, PyObject *kwds)
      * to avoid this we would INCREF the samples array above and keep a reference
      * to in the object struct */
     err = tsk_vargen_init(self->variant_generator,
-            self->tree_sequence->tree_sequence, samples, num_samples, options);
+            self->tree_sequence->tree_sequence, samples, num_samples, alleles,
+            options);
     if (err != 0) {
         handle_library_error(err);
         goto out;
     }
     ret = 0;
 out:
+    PyMem_Free(alleles);
     Py_XDECREF(samples_array);
     return ret;
 }
@@ -9321,15 +9298,6 @@ PyInit__tskit(void)
     }
     Py_INCREF(&TreeDiffIteratorType);
     PyModule_AddObject(module, "TreeDiffIterator", (PyObject *) &TreeDiffIteratorType);
-
-    /* HaplotypeGenerator type */
-    HaplotypeGeneratorType.tp_new = PyType_GenericNew;
-    if (PyType_Ready(&HaplotypeGeneratorType) < 0) {
-        return NULL;
-    }
-    Py_INCREF(&HaplotypeGeneratorType);
-    PyModule_AddObject(module, "HaplotypeGenerator",
-            (PyObject *) &HaplotypeGeneratorType);
 
     /* VariantGenerator type */
     VariantGeneratorType.tp_new = PyType_GenericNew;
