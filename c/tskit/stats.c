@@ -468,8 +468,9 @@ tsk_ld_calc_get_r2(tsk_ld_calc_t *self, tsk_id_t a, tsk_id_t b, double *r2)
     nAB = (double) tB->num_tracked_samples[sB.mutations[0].node];
     fAB = nAB / n;
     D = fAB - fA * fB;
-    *r2 = D * D / (fA * fB * (1 - fA) * (1 - fB));
-
+    /* *r2 = D * D / (fA * fB * (1 - fA) * (1 - fB)); Original R^2*/
+    *r2 = D / sqrt(fA * fB * (1 - fA) * (1 - fB)); /* actually R, not R^2 */
+    
     /* Now rewind the inner iterator back. */
     while (tB->index > tA->index) {
         ret = tsk_tree_prev(tB);
