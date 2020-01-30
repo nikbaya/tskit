@@ -269,7 +269,9 @@ tsk_ld_calc_get_r2_array_forward(tsk_ld_calc_t *self, tsk_id_t source_index,
         }
         fAB = nAB / n;
         D = fAB - fA * fB;
-        r2[j] = D * D / (fA * fB * (1 - fA) * (1 - fB));
+        /* r2[j] = D * D / (fA * fB * (1 - fA) * (1 - fB)); */
+        r2[j] = D / sqrt(fA * fB * (1 - fA) * (1 - fB));
+
     }
 
     /* Now rewind back the inner iterator and unmark all nodes that
@@ -358,7 +360,8 @@ tsk_ld_calc_get_r2_array_reverse(tsk_ld_calc_t *self, tsk_id_t source_index,
         }
         fAB = nAB / n;
         D = fAB - fA * fB;
-        r2[j] = D * D / (fA * fB * (1 - fA) * (1 - fB));
+        /* r2[j] = D * D / (fA * fB * (1 - fA) * (1 - fB)); */
+        r2[j] = D / sqrt(fA * fB * (1 - fA) * (1 - fB));
     }
 
     /* Now fast forward the inner iterator and unmark all nodes that
